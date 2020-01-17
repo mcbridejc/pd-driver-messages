@@ -1,0 +1,9 @@
+[package]
+authors = ["Jeff McBride <mcbridejc@gmail.com>"]
+edition = "2018"
+readme = "README.md"
+name = "pd-driver-messages"
+version = "0.1.0"
+
+[dependencies]
+generic-array = "*"
