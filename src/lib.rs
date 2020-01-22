@@ -2,7 +2,8 @@
 
 extern crate alloc;
 
-mod messages;
+use self::alloc::vec::Vec;
+pub mod messages;
 mod error;
 
 use messages::*;
@@ -93,11 +94,33 @@ impl<'a> WorkingBuffer {
     }
 }
 
+pub fn serialize(id: u8, payload: &[u8]) -> Vec<u8> {
+    fn escaped_push(b: u8, buf: &mut Vec<u8>) {
+        if b == 0x7d || b == 0x7e {
+            buf.push(0x7d);
+            buf.push(b ^ 0x20);
+        } else {
+            buf.push(b);
+        }
+    }
+    // We don't know the size required yet, but we know it will be *at least* this much
+    let mut buf = Vec::with_capacity(payload.len() + 4);
+    buf.push(0x7e); // Start of frame
+    escaped_push(id, &mut buf);
+    for b in payload {
+        escaped_push(*b, &mut buf);
+    }
+    let (chk_a, chk_b) = checksum(&buf[1..buf.len()]);
+    escaped_push(chk_a, &mut buf);
+    escaped_push(chk_b, &mut buf);
+    buf
+}
+
 pub struct Parser {
     parsing: bool,
     escaping: bool,
     buffer: WorkingBuffer,
-}
+}   
 
 impl Parser {
     pub fn new() -> Parser {
@@ -147,7 +170,7 @@ impl Parser {
 }
 
 #[cfg(test)]
-//#[macro_use]
+#[macro_use]
 extern crate std;
 mod tests {
     use crate::alloc::vec;
@@ -170,23 +193,7 @@ mod tests {
         None
     }
 
-    #[test]
-    fn test_bulk_capacitance_struct() {
-        use crate::*;
-        let bytes = &[0, 2, 4, 0, 5, 0];
-        let message = Message::from_payload(BULK_CAPACITANCE_ID, bytes);
-        assert!(message.is_ok());
-        let message = message.unwrap();
-        match message {
-            Message::BulkCapacitanceMsg(msg) => {
-                assert_eq!(msg.start_index, 0);
-                assert_eq!(msg.values.len(), 2);
-                assert_eq!(msg.values[0], 4);
-                assert_eq!(msg.values[1], 5);
-            },
-            _ => panic!("Wrong kind of message"),
-        }
-    }
+    
     #[test]
     fn test_bulk_capacitance_parse() {
         use crate::*;
