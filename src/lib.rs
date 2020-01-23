@@ -172,6 +172,8 @@ impl Parser {
 #[cfg(test)]
 #[macro_use]
 extern crate std;
+
+#[cfg(test)]
 mod tests {
     use crate::alloc::vec;
     use crate::alloc::vec::Vec;
@@ -218,7 +220,7 @@ mod tests {
     #[test]
     fn test_active_capacitance_parse() {
         use crate::*;
-        let mut bytes = vec![0x7e, ACTIVE_CAPACITANCE_ID, 2, 3];
+        let mut bytes = vec![0x7e, ACTIVE_CAPACITANCE_ID, 2, 3, 4, 5];
         append_checksum(&mut bytes);
         let mut parser = Parser::new();
         if let Some(msg) = parse_message(&mut parser, &bytes) {
@@ -226,12 +228,31 @@ mod tests {
             match msg {
                 
                 ActiveCapacitanceMsg(msg) => {
-                    assert_eq!(msg.value, 0x302);
+                    assert_eq!(msg.baseline, 0x302);
+                    assert_eq!(msg.measurement, 0x504);
                 },
                 _ => panic!("Invalid message type found"),
             }
         } else {
             panic!("No message parsed");
+        }
+    }
+
+    #[test]
+    fn test_electrode_enable_roundtrip() {
+        use crate::*;
+        let values: [u8; 16] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
+        let tx_msg = ElectrodeEnableStruct{ values };
+        let payload: Vec<u8> = tx_msg.into();
+        let tx_bytes = serialize(ELECTRODE_ENABLE_ID, &payload);
+        let mut parser = Parser::new();
+        let rx_msg = parse_message(&mut parser, &tx_bytes);
+        assert!(rx_msg.is_some());
+        let rx_msg = rx_msg.unwrap();
+        if let Message::ElectrodeEnableMsg(msg) = rx_msg {
+            assert_eq!(msg.values, values);
+        } else {
+            panic!("Did not parse expected message");
         }
     }
 }

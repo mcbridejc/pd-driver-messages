@@ -23,7 +23,7 @@ impl Message {
             ELECTRODE_ENABLE_ID => ElectrodeEnableStruct::message_size(data),
             BULK_CAPACITANCE_ID => BulkCapacitanceStruct::message_size(data),
             ACTIVE_CAPACITANCE_ID => ActiveCapacitanceStruct::message_size(data),
-            _ => panic!("Invalid message ID {}", id),
+            _ => Some(0),
         }
     }
 
@@ -33,7 +33,7 @@ impl Message {
             ELECTRODE_ENABLE_ID => Ok(ElectrodeEnableMsg(ElectrodeEnableStruct::try_from(data)?)),
             BULK_CAPACITANCE_ID => Ok(BulkCapacitanceMsg(BulkCapacitanceStruct::try_from(data)?)),
             ACTIVE_CAPACITANCE_ID => Ok(ActiveCapacitanceMsg(ActiveCapacitanceStruct::try_from(data)?)),
-            _ => panic!("Invalid message ID {}", id),
+            _ => Err(ParseError),
         }
     }
 
@@ -165,6 +165,23 @@ impl TryFrom<&[u8]> for ActiveCapacitanceStruct {
 #[cfg(test)]
 mod tests {
     use crate::alloc::vec::Vec;
+
+    #[test]
+    fn active_capacitance_deser() {
+        use crate::*;
+        let bytes = &[0x10, 0x11, 0x12, 0x13];
+        let message = Message::from_payload(ACTIVE_CAPACITANCE_ID, bytes);
+        assert!(message.is_ok());
+        let message = message.unwrap();
+        match message {
+            Message::ActiveCapacitanceMsg(msg) => {
+                assert_eq!(0x1110, msg.baseline);
+                assert_eq!(0x1312, msg.measurement);
+            }, 
+            _ => panic!("Wrong kind of message")
+        }
+    }
+
     #[test]
     fn test_bulk_capacitance_deser() {
         use crate::*;
@@ -211,7 +228,7 @@ mod tests {
     #[test]
     fn test_electrode_en_ser() {
         use crate::*;
-        let expected_bytes = &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];;
+        let expected_bytes = &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
         let message = ElectrodeEnableStruct{values: *expected_bytes};
         let bytes: Vec<u8> = message.into();
         assert_eq!(bytes, expected_bytes);
