@@ -36,8 +36,8 @@ impl<'a> WorkingBuffer {
     }
 
     pub fn payload(&'a self) -> &'a [u8] {
-        if self.count >= 1 {
-            &self.buffer[1..self.count]
+        if self.count >= 3 {
+            &self.buffer[1..self.count - 2]
         } else {
             &self.buffer[0..0]
         }
