@@ -6,12 +6,14 @@ pub const ELECTRODE_ENABLE_ID: u8 = 0;
 pub const DRIVE_ENABLE_ID: u8 = 1;
 pub const BULK_CAPACITANCE_ID: u8 = 2;
 pub const ACTIVE_CAPACITANCE_ID: u8 = 3;
+pub const ELECTRODE_ACK_ID: u8 = 4;
 
 #[derive(Debug, Clone)]
 pub enum Message {
     ElectrodeEnableMsg(ElectrodeEnableStruct),
     BulkCapacitanceMsg(BulkCapacitanceStruct),
     ActiveCapacitanceMsg(ActiveCapacitanceStruct),
+    ElectrodeAckMsg(ElectrodeAckStruct),
 }
 
 impl Message {
@@ -23,6 +25,7 @@ impl Message {
             ELECTRODE_ENABLE_ID => ElectrodeEnableStruct::message_size(data),
             BULK_CAPACITANCE_ID => BulkCapacitanceStruct::message_size(data),
             ACTIVE_CAPACITANCE_ID => ActiveCapacitanceStruct::message_size(data),
+            ELECTRODE_ACK_ID => ElectrodeAckStruct::message_size(data),
             _ => Some(0),
         }
     }
@@ -33,13 +36,50 @@ impl Message {
             ELECTRODE_ENABLE_ID => Ok(ElectrodeEnableMsg(ElectrodeEnableStruct::try_from(data)?)),
             BULK_CAPACITANCE_ID => Ok(BulkCapacitanceMsg(BulkCapacitanceStruct::try_from(data)?)),
             ACTIVE_CAPACITANCE_ID => Ok(ActiveCapacitanceMsg(ActiveCapacitanceStruct::try_from(data)?)),
+            ELECTRODE_ACK_ID => Ok(ElectrodeAckMsg(ElectrodeAckStruct::try_from(data)?)),
             _ => Err(ParseError),
         }
     }
+}
 
+pub trait MessageStruct {
+    fn id(&self) -> u8;
 
+    fn payload(&self) -> Vec<u8>;
 
+    /// Returns the size of the message payload if it is known,
+    /// or None if it cannot yet be determined (i.e. because it depends on
+    /// message content not yet recieved)
+    ///
+    /// `data` is the payload contents received so far, it may be a partial
+    /// message.
+    fn message_size(data: &[u8]) -> Option<usize>;
+}
 
+#[derive(Debug, Clone)]
+pub struct ElectrodeAckStruct {
+}
+
+impl MessageStruct for ElectrodeAckStruct {
+    fn id(&self) -> u8 {
+        ELECTRODE_ACK_ID
+    }
+
+    fn payload(&self) -> Vec<u8> {
+        Vec::new()
+    }
+
+    fn message_size(_data: &[u8]) -> Option<usize> {
+        Some(0)
+    }
+}
+
+impl TryFrom<&[u8]> for ElectrodeAckStruct {
+    type Error = ParseError;
+
+    fn try_from(_data: &[u8]) -> Result<Self, Self::Error> {
+        Ok(Self{})
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -47,15 +87,17 @@ pub struct ElectrodeEnableStruct {
     pub values: [u8; 16],
 }
 
-impl ElectrodeEnableStruct {
-    pub fn message_size(_data: &[u8]) -> Option<usize> {
-        Some(16)
+impl MessageStruct for ElectrodeEnableStruct {
+    fn id(&self) -> u8 {
+        ELECTRODE_ENABLE_ID
     }
-}
 
-impl Into<Vec<u8>> for ElectrodeEnableStruct {
-    fn into(self) -> Vec<u8> {
+    fn payload(&self) -> Vec<u8> {
         self.values[..].into()
+    }
+
+    fn message_size(_data: &[u8]) -> Option<usize> {
+        Some(16)
     }
 }
 
@@ -80,8 +122,23 @@ pub struct BulkCapacitanceStruct {
     pub values: Vec<u16>,
 }
 
-impl BulkCapacitanceStruct {
-    pub fn message_size(data: &[u8]) -> Option<usize> {
+impl MessageStruct for BulkCapacitanceStruct {
+    fn id(&self) -> u8 {
+        BULK_CAPACITANCE_ID
+    }
+
+    fn payload(&self) -> Vec<u8> {
+        let mut buf: Vec<u8> = Vec::with_capacity(self.values.len() * 2 + 2);
+        buf.push(self.start_index);
+        buf.push(self.values.len() as u8);
+        for x in &self.values {
+            buf.push((*x & 0xff) as u8);
+            buf.push((*x >> 8) as u8);
+        }
+        buf
+    }
+
+    fn message_size(data: &[u8]) -> Option<usize> {
         // We don't know how long the message will be until we get the first byte
         if data.len() < 2 {
             None
@@ -90,19 +147,6 @@ impl BulkCapacitanceStruct {
         }
     }
 
-}
-
-impl Into<Vec<u8>> for BulkCapacitanceStruct {
-    fn into(self) -> Vec<u8> {
-        let mut buf: Vec<u8> = Vec::with_capacity(self.values.len() * 2 + 2);
-        buf.push(self.start_index);
-        buf.push(self.values.len() as u8);
-        for x in self.values {
-            buf.push((x & 0xff) as u8);
-            buf.push((x >> 8) as u8);
-        }
-        buf
-    }
 }
 
 impl TryFrom<&[u8]> for BulkCapacitanceStruct {
@@ -132,20 +176,22 @@ pub struct ActiveCapacitanceStruct {
     pub measurement: u16,
 }
 
-impl ActiveCapacitanceStruct {
-    pub fn message_size(_data: &[u8]) -> Option<usize> {
-        Some(4)
+impl MessageStruct for ActiveCapacitanceStruct {
+    fn id(&self) -> u8 {
+        ACTIVE_CAPACITANCE_ID
     }
-}
 
-impl Into<Vec<u8>> for ActiveCapacitanceStruct {
-    fn into(self) -> Vec<u8> {
+    fn payload(&self) -> Vec<u8> {
         let mut buf: Vec<u8> = Vec::with_capacity(4);
         buf.push((self.baseline & 0xff) as u8);
         buf.push((self.baseline >> 8) as u8);
         buf.push((self.measurement & 0xff) as u8);
         buf.push((self.measurement >> 8) as u8);
         buf
+    }
+
+    fn message_size(_data: &[u8]) -> Option<usize> {
+        Some(4)
     }
 }
 
@@ -164,7 +210,6 @@ impl TryFrom<&[u8]> for ActiveCapacitanceStruct {
 
 #[cfg(test)]
 mod tests {
-    use crate::alloc::vec::Vec;
 
     #[test]
     fn active_capacitance_deser() {
@@ -177,7 +222,7 @@ mod tests {
             Message::ActiveCapacitanceMsg(msg) => {
                 assert_eq!(0x1110, msg.baseline);
                 assert_eq!(0x1312, msg.measurement);
-            }, 
+            },
             _ => panic!("Wrong kind of message")
         }
     }
@@ -204,7 +249,7 @@ mod tests {
         use crate::*;
         let expected_bytes = &[8, 2, 4, 0, 5, 0];
         let message = BulkCapacitanceStruct{start_index: 8, values: vec![4, 5]};
-        let bytes: Vec<u8> = message.into();
+        let bytes: Vec<u8> = message.payload();
         assert_eq!(bytes, expected_bytes);
     }
 
@@ -230,7 +275,7 @@ mod tests {
         use crate::*;
         let expected_bytes = &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
         let message = ElectrodeEnableStruct{values: *expected_bytes};
-        let bytes: Vec<u8> = message.into();
+        let bytes: Vec<u8> = message.payload();
         assert_eq!(bytes, expected_bytes);
     }
 

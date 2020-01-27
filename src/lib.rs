@@ -94,7 +94,17 @@ impl<'a> WorkingBuffer {
     }
 }
 
-pub fn serialize(id: u8, payload: &[u8]) -> Vec<u8> {
+/// Get transmittable bytes for msg
+pub fn serialize_msg<T>(msg: &T) -> Vec<u8>
+where 
+    T: MessageStruct
+{
+    let id = msg.id();
+    let payload: Vec<u8> = msg.payload();
+    serialize_raw(id, &payload)
+}
+
+pub fn serialize_raw(id: u8, payload: &[u8]) -> Vec<u8> {
     fn escaped_push(b: u8, buf: &mut Vec<u8>) {
         if b == 0x7d || b == 0x7e {
             buf.push(0x7d);
@@ -243,8 +253,8 @@ mod tests {
         use crate::*;
         let values: [u8; 16] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
         let tx_msg = ElectrodeEnableStruct{ values };
-        let payload: Vec<u8> = tx_msg.into();
-        let tx_bytes = serialize(ELECTRODE_ENABLE_ID, &payload);
+        let payload: Vec<u8> = tx_msg.payload();
+        let tx_bytes = serialize_raw(ELECTRODE_ENABLE_ID, &payload);
         let mut parser = Parser::new();
         let rx_msg = parse_message(&mut parser, &tx_bytes);
         assert!(rx_msg.is_some());
