@@ -167,18 +167,19 @@ impl Parser {
         }
 
         if self.buffer.is_complete() {
-            self.reset();
             if self.buffer.checksum() == self.buffer.calc_checksum() {
                 let msg_id = self.buffer.msg_id().unwrap();
                 let payload = self.buffer.payload();
                 let result = Message::from_payload(msg_id, payload);
+                self.reset();
                 if result.is_ok() {
                     return Ok(Some(result.unwrap()));
                 }
+            } else {
+                self.reset();
+                return Err(ParseError{});
             }
-        } else {
-            return Err(ParseError{});
-        }
+        } 
         Ok(None)
     }
 }
