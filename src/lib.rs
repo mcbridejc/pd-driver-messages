@@ -96,7 +96,7 @@ impl<'a> WorkingBuffer {
 
 /// Get transmittable bytes for msg
 pub fn serialize_msg<T>(msg: &T) -> Vec<u8>
-where 
+where
     T: MessageStruct
 {
     let id = msg.id();
@@ -130,7 +130,7 @@ pub struct Parser {
     parsing: bool,
     escaping: bool,
     buffer: WorkingBuffer,
-}   
+}
 
 impl Parser {
     pub fn new() -> Parser {
@@ -147,35 +147,39 @@ impl Parser {
         self.buffer.reset();
     }
 
-    pub fn parse(&mut self, byte: u8) -> Option<Message> {
+    pub fn parse(&mut self, byte: u8) -> Result<Option<Message>, ParseError> {
         let mut byte = byte;
         if self.escaping {
             byte = byte ^ 0x20;
             self.escaping = false;
         } else if byte == 0x7d {
             self.escaping = true;
-            return None;
+            return Ok(None);
         } else if byte == 0x7e {
             // start of frame
             self.reset();
-            return None;
+            return Ok(None);
         }
 
         if let Err(_e) = self.buffer.push(byte) {
             self.reset();
-            return None;
+            return Ok(None);
         }
 
-        let msg_id = self.buffer.msg_id().unwrap();
-        let payload = self.buffer.payload();
         if self.buffer.is_complete() {
-            let result = Message::from_payload(msg_id, payload);
             self.reset();
-            if result.is_ok() {
-                return Some(result.unwrap());
+            if self.buffer.checksum() == self.buffer.calc_checksum() {
+                let msg_id = self.buffer.msg_id().unwrap();
+                let payload = self.buffer.payload();
+                let result = Message::from_payload(msg_id, payload);
+                if result.is_ok() {
+                    return Ok(Some(result.unwrap()));
+                }
             }
+        } else {
+            return Err(ParseError{});
         }
-        None
+        Ok(None)
     }
 }
 
@@ -205,7 +209,7 @@ mod tests {
         None
     }
 
-    
+
     #[test]
     fn test_bulk_capacitance_parse() {
         use crate::*;
@@ -236,7 +240,7 @@ mod tests {
         if let Some(msg) = parse_message(&mut parser, &bytes) {
             use Message::*;
             match msg {
-                
+
                 ActiveCapacitanceMsg(msg) => {
                     assert_eq!(msg.baseline, 0x302);
                     assert_eq!(msg.measurement, 0x504);
