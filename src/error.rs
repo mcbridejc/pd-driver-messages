@@ -8,9 +8,6 @@ pub enum ParseError {
     DeserializationError
 }
 
-// #[derive(Debug, Clone)]
-// pub struct ParseError;
-
 impl fmt::Display for ParseError {
     
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -31,29 +28,3 @@ impl fmt::Display for ParseError {
         }
     }
 }
-
-// impl fmt::Display for ParseError::SizeOverrun {
-//     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        
-//     }
-// }
-
-// impl fmt::Display for ParseError::ChecksumError {
-//     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-//         write!(f, "Mismatched checksum. Found {:x}, expected {:x}", self.0, self.1)
-//     }
-// }
-
-
-// impl fmt::Display for ParseError::UnknownPacketId {
-//     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-//         write!(f, "Found unrecognized packet id 0x{:x}", self.0)
-//     }
-// }
-
-
-// impl fmt::Display for ParseError::DeserializationError {
-//     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-//         write!(f, "Failed parsing payload into packet struct")
-//     }
-// }
