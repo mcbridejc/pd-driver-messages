@@ -37,7 +37,7 @@ impl Message {
             BULK_CAPACITANCE_ID => Ok(BulkCapacitanceMsg(BulkCapacitanceStruct::try_from(data)?)),
             ACTIVE_CAPACITANCE_ID => Ok(ActiveCapacitanceMsg(ActiveCapacitanceStruct::try_from(data)?)),
             ELECTRODE_ACK_ID => Ok(ElectrodeAckMsg(ElectrodeAckStruct::try_from(data)?)),
-            _ => Err(ParseError),
+            _ => Err(ParseError::UnknownPacketId(id)),
         }
     }
 }
@@ -106,7 +106,7 @@ impl TryFrom<&[u8]> for ElectrodeEnableStruct {
 
     fn try_from(data: &[u8]) -> Result<Self, Self::Error> {
         if data.len() != 16 {
-            return Err(ParseError);
+            return Err(ParseError::DeserializationError);
         }
         let mut values = [0u8; 16];
         for i in 0..16 {
@@ -154,12 +154,12 @@ impl TryFrom<&[u8]> for BulkCapacitanceStruct {
 
     fn try_from(data: &[u8]) -> Result<Self, Self::Error> {
         if data.len() < 2 {
-            return Err(ParseError);
+            return Err(ParseError::DeserializationError);
         }
         let start_index = data[0];
         let count = data[1];
         if data.len() < (2 + count * 2) as usize {
-            return Err(ParseError);
+            return Err(ParseError::DeserializationError);
         }
         let mut values: Vec<u16> = Vec::with_capacity(count as usize);
         for i in 0..count {
@@ -200,7 +200,7 @@ impl TryFrom<&[u8]> for ActiveCapacitanceStruct {
 
     fn try_from(data: &[u8]) -> Result<Self, Self::Error> {
         if data.len() < 4 {
-            return Err(ParseError);
+            return Err(ParseError::DeserializationError);
         }
         let baseline = data[0] as u16 + ((data[1] as u16) << 8);
         let measurement = data[2] as u16 + ((data[3] as u16) << 8);

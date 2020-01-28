@@ -21,7 +21,7 @@ pub fn checksum(data: &[u8]) -> (u8, u8) {
     let mut b: u8 = 0;
     for x in data {
         a = a.wrapping_add(*x);
-        b = b.wrapping_add(b);
+        b = b.wrapping_add(a);
     }
     return (a, b);
 }
@@ -55,7 +55,7 @@ impl<'a> WorkingBuffer {
 
     pub fn calc_checksum(&self) -> (u8, u8) {
         if self.count > 0 {
-            checksum(&self.buffer[0..self.count])
+            checksum(&self.buffer[0..self.count-2])
         } else {
             (0, 0)
         }
@@ -81,7 +81,7 @@ impl<'a> WorkingBuffer {
             self.count += 1;
             Ok(())
         } else {
-            Err(ParseError{})
+            Err(ParseError::SizeOverrun)
         }
     }
 
@@ -176,8 +176,12 @@ impl Parser {
                     return Ok(Some(result.unwrap()));
                 }
             } else {
+                let (found_a, found_b) = self.buffer.checksum();
+                let (exp_a, exp_b) = self.buffer.calc_checksum();
+                let found = (found_a as u16) + (found_b as u16) * 256;
+                let exp = (exp_a as u16) + (exp_b as u16) * 256;
                 self.reset();
-                return Err(ParseError{});
+                return Err(ParseError::ChecksumError(found, exp));
             }
         } 
         Ok(None)
@@ -194,20 +198,23 @@ mod tests {
     use crate::alloc::vec::Vec;
     use crate::Parser;
     use crate::Message;
+    use crate::ParseError;
     fn append_checksum(data: &mut Vec<u8>) {
         use crate::checksum;
         let (chk_a, chk_b) = checksum(&data[1..data.len()]);
+        std::println!("Appending {:x} {:x} to packet", chk_a, chk_b);
         data.append(&mut vec![chk_a, chk_b]);
     }
 
-    fn parse_message(parser: &mut Parser, data: &[u8]) -> Option<Message> {
+    fn parse_message(parser: &mut Parser, data: &[u8]) -> Result<Option<Message>, ParseError> {
         for b in data {
-            match parser.parse(*b) {
-                Some(msg) => return Some(msg),
+            let result = parser.parse(*b)?;
+            match result {
+                Some(msg) => return Ok(Some(msg)),
                 None => (),
             }
         }
-        None
+        Ok(None)
     }
 
 
@@ -218,7 +225,12 @@ mod tests {
         append_checksum(&mut bytes);
         let mut rxmsg = None;
         let mut parser = Parser::new();
-        if let Some(msg) = parse_message(&mut parser, &bytes) {
+        let result = parse_message(&mut parser, &bytes);
+        if result.is_err() {
+            panic!("Error while parsing: {}", result.err().unwrap());
+        }
+        let result = result.unwrap();
+        if let Some(msg) = result {
             use Message::*;
             match msg {
                 BulkCapacitanceMsg(msg) => rxmsg = Some(msg),
@@ -238,10 +250,14 @@ mod tests {
         let mut bytes = vec![0x7e, ACTIVE_CAPACITANCE_ID, 2, 3, 4, 5];
         append_checksum(&mut bytes);
         let mut parser = Parser::new();
-        if let Some(msg) = parse_message(&mut parser, &bytes) {
+        let result = parse_message(&mut parser, &bytes);
+        if result.is_err() {
+            panic!("Error while parsing: {}", result.err().unwrap());
+        }
+        let result = result.unwrap();
+        if let Some(msg) = result {
             use Message::*;
             match msg {
-
                 ActiveCapacitanceMsg(msg) => {
                     assert_eq!(msg.baseline, 0x302);
                     assert_eq!(msg.measurement, 0x504);
@@ -261,7 +277,11 @@ mod tests {
         let payload: Vec<u8> = tx_msg.payload();
         let tx_bytes = serialize_raw(ELECTRODE_ENABLE_ID, &payload);
         let mut parser = Parser::new();
-        let rx_msg = parse_message(&mut parser, &tx_bytes);
+        let result = parse_message(&mut parser, &tx_bytes);
+        if result.is_err() {
+            panic!("Error while parsing: {}", result.err().unwrap());
+        }
+        let rx_msg = result.unwrap();
         assert!(rx_msg.is_some());
         let rx_msg = rx_msg.unwrap();
         if let Message::ElectrodeEnableMsg(msg) = rx_msg {
