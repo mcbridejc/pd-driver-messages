@@ -16,14 +16,29 @@ pub struct WorkingBuffer {
     buffer: [u8; MAX_MESSAGE_SIZE],
 }
 
-pub fn checksum(data: &[u8]) -> (u8, u8) {
-    let mut a: u8 = 0;
-    let mut b: u8 = 0;
-    for x in data {
-        a = a.wrapping_add(*x);
-        b = b.wrapping_add(a);
+#[derive(Clone, Debug, Default)]
+pub struct Checksum {
+    pub a: u8,
+    pub b: u8,
+}
+
+impl Checksum {
+    pub fn add_byte(&mut self, x: u8) {
+        self.a = self.a.wrapping_add(x);
+        self.b = self.b.wrapping_add(self.a);
     }
-    return (a, b);
+
+    pub fn get(&self) -> (u8, u8) {
+        (self.a, self.b)
+    }
+}
+
+pub fn checksum(data: &[u8]) -> (u8, u8) {
+    let mut chk = Checksum::default();
+    for x in data {
+        chk.add_byte(*x);
+    }
+    chk.get()
 }
 
 impl<'a> WorkingBuffer {
@@ -115,12 +130,15 @@ pub fn serialize_raw(id: u8, payload: &[u8]) -> Vec<u8> {
     }
     // We don't know the size required yet, but we know it will be *at least* this much
     let mut buf = Vec::with_capacity(payload.len() + 4);
+    let mut chk = Checksum::default();
     buf.push(0x7e); // Start of frame
     escaped_push(id, &mut buf);
+    chk.add_byte(id);
     for b in payload {
         escaped_push(*b, &mut buf);
+        chk.add_byte(*b);
     }
-    let (chk_a, chk_b) = checksum(&buf[1..buf.len()]);
+    let (chk_a, chk_b) = chk.get();
     escaped_push(chk_a, &mut buf);
     escaped_push(chk_b, &mut buf);
     buf
@@ -272,7 +290,7 @@ mod tests {
     #[test]
     fn test_electrode_enable_roundtrip() {
         use crate::*;
-        let values: [u8; 16] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
+        let values: [u8; 16] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 0x7d, 0x7e];
         let tx_msg = ElectrodeEnableStruct{ values };
         let payload: Vec<u8> = tx_msg.payload();
         let tx_bytes = serialize_raw(ELECTRODE_ENABLE_ID, &payload);
