@@ -6,14 +6,16 @@ pub const ELECTRODE_ENABLE_ID: u8 = 0;
 pub const DRIVE_ENABLE_ID: u8 = 1;
 pub const BULK_CAPACITANCE_ID: u8 = 2;
 pub const ACTIVE_CAPACITANCE_ID: u8 = 3;
-pub const ELECTRODE_ACK_ID: u8 = 4;
+pub const COMMAND_ACK_ID: u8 = 4;
+pub const MOVE_STEPPER_ID: u8 = 5;
 
 #[derive(Debug, Clone)]
 pub enum Message {
     ElectrodeEnableMsg(ElectrodeEnableStruct),
     BulkCapacitanceMsg(BulkCapacitanceStruct),
     ActiveCapacitanceMsg(ActiveCapacitanceStruct),
-    ElectrodeAckMsg(ElectrodeAckStruct),
+    CommandAckMsg(CommandAckStruct),
+    MoveStepperMsg(MoveStepperStruct),
 }
 
 impl Message {
@@ -25,7 +27,7 @@ impl Message {
             ELECTRODE_ENABLE_ID => ElectrodeEnableStruct::message_size(data),
             BULK_CAPACITANCE_ID => BulkCapacitanceStruct::message_size(data),
             ACTIVE_CAPACITANCE_ID => ActiveCapacitanceStruct::message_size(data),
-            ELECTRODE_ACK_ID => ElectrodeAckStruct::message_size(data),
+            COMMAND_ACK_ID => CommandAckStruct::message_size(data),
             _ => Some(0),
         }
     }
@@ -36,7 +38,7 @@ impl Message {
             ELECTRODE_ENABLE_ID => Ok(ElectrodeEnableMsg(ElectrodeEnableStruct::try_from(data)?)),
             BULK_CAPACITANCE_ID => Ok(BulkCapacitanceMsg(BulkCapacitanceStruct::try_from(data)?)),
             ACTIVE_CAPACITANCE_ID => Ok(ActiveCapacitanceMsg(ActiveCapacitanceStruct::try_from(data)?)),
-            ELECTRODE_ACK_ID => Ok(ElectrodeAckMsg(ElectrodeAckStruct::try_from(data)?)),
+            COMMAND_ACK_ID => Ok(CommandAckMsg(CommandAckStruct::try_from(data)?)),
             _ => Err(ParseError::UnknownPacketId(id)),
         }
     }
@@ -57,16 +59,19 @@ pub trait MessageStruct {
 }
 
 #[derive(Debug, Clone)]
-pub struct ElectrodeAckStruct {
+pub struct CommandAckStruct {
+    pub acked_id: u8,
 }
 
-impl MessageStruct for ElectrodeAckStruct {
+impl MessageStruct for CommandAckStruct {
     fn id(&self) -> u8 {
-        ELECTRODE_ACK_ID
+        COMMAND_ACK_ID
     }
 
     fn payload(&self) -> Vec<u8> {
-        Vec::new()
+        let mut buf = Vec::new();
+        buf.push(self.acked_id);
+        buf
     }
 
     fn message_size(_data: &[u8]) -> Option<usize> {
@@ -74,11 +79,14 @@ impl MessageStruct for ElectrodeAckStruct {
     }
 }
 
-impl TryFrom<&[u8]> for ElectrodeAckStruct {
+impl TryFrom<&[u8]> for CommandAckStruct {
     type Error = ParseError;
 
-    fn try_from(_data: &[u8]) -> Result<Self, Self::Error> {
-        Ok(Self{})
+    fn try_from(data: &[u8]) -> Result<Self, Self::Error> {
+        if data.len() < 1 {
+            return Err(ParseError::DeserializationError);
+        }
+        Ok(Self{acked_id: data[0]})
     }
 }
 
@@ -205,6 +213,45 @@ impl TryFrom<&[u8]> for ActiveCapacitanceStruct {
         let baseline = data[0] as u16 + ((data[1] as u16) << 8);
         let measurement = data[2] as u16 + ((data[3] as u16) << 8);
         Ok(Self{baseline, measurement})
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct MoveStepperStruct {
+    pub steps: i16,
+    pub period: u16,
+}
+
+impl MessageStruct for MoveStepperStruct {
+    fn id(&self) -> u8 {
+        MOVE_STEPPER_ID
+    }
+
+    fn payload(&self) -> Vec<u8> {
+        let mut buf: Vec<u8> = Vec::with_capacity(4);
+
+        buf.push((self.steps & 0xff) as u8);
+        buf.push((self.steps >> 8) as u8);
+        buf.push((self.period & 0xff) as u8);
+        buf.push((self.period >> 8) as u8);
+        buf
+    }
+
+    fn message_size(_data: &[u8]) -> Option<usize> {
+        Some(4)
+    }
+}
+
+impl TryFrom<&[u8]> for MoveStepperStruct {
+    type Error = ParseError;
+
+    fn try_from(data: &[u8]) -> Result<Self, Self::Error> {
+        if data.len() < 4 {
+            return Err(ParseError::DeserializationError);
+        }
+        let steps = (data[0] as u16 + ((data[1] as u16) << 8)) as i16;
+        let period = data[2] as u16 + ((data[3] as u16) << 8);
+        Ok(Self{steps, period})
     }
 }
 
