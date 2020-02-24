@@ -28,6 +28,7 @@ impl Message {
             BULK_CAPACITANCE_ID => BulkCapacitanceStruct::message_size(data),
             ACTIVE_CAPACITANCE_ID => ActiveCapacitanceStruct::message_size(data),
             COMMAND_ACK_ID => CommandAckStruct::message_size(data),
+            MOVE_STEPPER_ID => MoveStepperStruct::message_size(data),
             _ => Some(0),
         }
     }
@@ -39,6 +40,7 @@ impl Message {
             BULK_CAPACITANCE_ID => Ok(BulkCapacitanceMsg(BulkCapacitanceStruct::try_from(data)?)),
             ACTIVE_CAPACITANCE_ID => Ok(ActiveCapacitanceMsg(ActiveCapacitanceStruct::try_from(data)?)),
             COMMAND_ACK_ID => Ok(CommandAckMsg(CommandAckStruct::try_from(data)?)),
+            MOVE_STEPPER_ID => Ok(MoveStepperMsg(MoveStepperStruct::try_from(data)?)),
             _ => Err(ParseError::UnknownPacketId(id)),
         }
     }
@@ -75,7 +77,7 @@ impl MessageStruct for CommandAckStruct {
     }
 
     fn message_size(_data: &[u8]) -> Option<usize> {
-        Some(0)
+        Some(1)
     }
 }
 
